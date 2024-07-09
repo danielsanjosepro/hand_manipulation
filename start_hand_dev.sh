@@ -1,0 +1,11 @@
+docker run \
+    --net=host \
+    --ipc=host \
+    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+    -v /home/$(whoami)/.dotfiles/config/nvim:/root/.config/nvim \
+    -v $(pwd):/root/hand_manipulation \
+    --env DISPLAY \
+    --env LOCAL_USER_ID=$(id -u) \
+    --env QT_X11_NO_MITSHM=1 \
+    --privileged \
+    -it hand_manipulation

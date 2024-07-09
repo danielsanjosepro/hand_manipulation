@@ -1,4 +1,3 @@
-
 docker run \
     --net=host \
     --ipc=host \
@@ -6,4 +5,3 @@ docker run \
     --env DISPLAY \
     --privileged \
     -it hand_manipulation
-

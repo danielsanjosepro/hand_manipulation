@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "hand-manipulation"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+mujoco = "^3.1.6"
+ruff = "^0.5.1"
+rich = "^13.7.1"
+transforms3d = "^0.4.2"
+
+[tool.setuptools]
+packages = ["shadow_hand_grasping"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = [
+    "UP",
+    "D",
+]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
