@@ -1,4 +1,12 @@
-"""Class containing funcitions to control the Shadow Hand in the MuJoCo environment."""
+"""Class containing functions to control the Shadow Hand in the MuJoCo environment.
+
+Some important classes are:
+- ShadowLeftHandActuators: Contains the actuator to joint mappings for the Shadow Left Hand.
+- ShadowRightHandActuators: Contains the actuator to joint mappings for the Shadow Right Hand. (Not implemented)
+- ShadowHand: Class to control the Shadow Hand in the MuJoCo environment.
+    -
+- PIDController: Class that implements a PID controller for the Shadow Hand digits.
+"""
 
 import logging
 from typing import List, Tuple
@@ -8,11 +16,9 @@ from rich.logging import RichHandler
 import numpy as np
 from transforms3d.quaternions import quat2mat
 
+# Set up the logging
 FORMAT = "%(message)s"
-logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
-
+logging.basicConfig(level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 log = logging.getLogger("rich")
 # log.setLevel(logging.DEBUG)
 log.setLevel(logging.INFO)
@@ -91,32 +97,29 @@ class ShadowLeftHandActuators:
         log.debug(f"{self.joint_to_actuator_mat}")
 
     def initialize_actuator_to_joint_mat(self):
-        """Initialize the actuator to joint matrix which maps actuator to joint space such that joint = A2J @ actuator."""
+        """Initialize the actuator to joint matrix which maps actuator to joint space such that joint = A2J @ actuator.
+
+        Remark: The matrix is of shape (n_joints, n_actuators).
+        """
         self.actuator_to_joint_mat = np.zeros((self.n_joints, self.n_actuators))
 
         for actuator, joint in self.actuator_to_joint.items():
             if isinstance(joint, list):
                 for j in joint:
-                    self.actuator_to_joint_mat[
-                        self.model.joint(j).id, self.model.actuator(actuator).id
-                    ] = 1
+                    self.actuator_to_joint_mat[self.model.joint(j).id, self.model.actuator(actuator).id] = 1
             else:
-                self.actuator_to_joint_mat[
-                    self.model.joint(joint).id, self.model.actuator(actuator).id
-                ] = 1
+                self.actuator_to_joint_mat[self.model.joint(joint).id, self.model.actuator(actuator).id] = 1
 
     def initialize_joint_to_actuator_mat(self):
-        """Initialize the joint to actuator matrix which maps joint to actuator space such that actuator = J2A @ joint."""
+        """Initialize the joint to actuator matrix which maps joint to actuator space such that actuator = J2A @ joint.
+
+        Remark: The matrix is of shape (n_actuators, n_joints).
+        """
         self.joint_to_actuator_mat = np.linalg.pinv(self.actuator_to_joint_mat)
-
-    def actuator_id(self, actuator: str) -> int:
-        return self.model.actuator(actuator).id
-
-    def joint_id(self, joint: str) -> int:
-        return self.model.joint(joint).id
 
     def joint_names(self, digit: str) -> List[str]:
         """Return the joint names of the digit."""
+        # TODO: actually the wrist joints should be included in the finger motion as well
         if digit == "thumb":
             return ["lh_THJ5", "lh_THJ4", "lh_THJ3", "lh_THJ2", "lh_THJ1"]
         elif digit == "index":
@@ -134,28 +137,12 @@ class ShadowLeftHandActuators:
         """Return the joint ids of the digit."""
         return np.sort([self.joint_id(joint) for joint in self.joint_names(digit)])
 
-    def actuation(
-        self, digit: str, joint_control_signal: np.ndarray
-    ) -> Tuple[List[int], np.ndarray]:
+    def actuation(self, digit: str, joint_control_signal: np.ndarray) -> Tuple[List[int], np.ndarray]:
         """Return the actuator ids and values for the joint control signal."""
         if digit == "thumb":
             return self.actuation_thumb(joint_control_signal)
         else:
             raise NotImplementedError(f"Actuation for digit: {digit} not implemented.")
-
-    def actuation_thumb(
-        self, joint_control_signal: np.ndarray
-    ) -> Tuple[List[int], np.ndarray]:
-        """Return the actuator ids and values for the thumb joint control signal."""
-        thumb_actuators = [
-            self.actuator_id("lh_A_THJ5"),
-            self.actuator_id("lh_A_THJ4"),
-            self.actuator_id("lh_A_THJ3"),
-            self.actuator_id("lh_A_THJ2"),
-            self.actuator_id("lh_A_THJ1"),
-        ]
-        thumb_actuator_values = joint_control_signal[self.joints("thumb")]
-        return thumb_actuators, thumb_actuator_values
 
 
 class ShadowRightHandActuators:
@@ -163,47 +150,7 @@ class ShadowRightHandActuators:
 
     def __init__(self):
         """Initialize the Shadow Right Hand Actuators."""
-        self.rh_A_WRJ2 = 0
-        self.rh_A_WRJ1 = 1
-        self.rh_A_THJ5 = 2
-        self.rh_A_THJ4 = 3
-        self.rh_A_THJ3 = 4
-        self.rh_A_THJ2 = 5
-        self.rh_A_THJ1 = 6
-        self.rh_A_FFJ4 = 7
-        self.rh_A_FFJ3 = 8
-        self.rh_A_FFJ0 = 9
-        self.rh_A_MFJ4 = 10
-        self.rh_A_MFJ3 = 11
-        self.rh_A_MFJ0 = 12
-        self.rh_A_RFJ4 = 13
-        self.rh_A_RFJ3 = 14
-        self.rh_A_RFJ0 = 15
-        self.rh_A_LFJ5 = 16
-        self.rh_A_LFJ4 = 17
-        self.rh_A_LFJ3 = 18
-        self.rh_A_LFJ0 = 19
-
-    def joints(self, digit: str) -> list:
-        """Get the joints of the digit."""
-        if digit == "thumb":
-            return [
-                self.rh_A_THJ5,
-                self.rh_A_THJ4,
-                self.rh_A_THJ3,
-                self.rh_A_THJ2,
-                self.rh_A_THJ1,
-            ]
-        elif digit == "index":
-            return [self.rh_A_FFJ4, self.rh_A_FFJ3, self.rh_A_FFJ0]
-        elif digit == "middle":
-            return [self.rh_A_MFJ4, self.rh_A_MFJ3, self.rh_A_MFJ0]
-        elif digit == "ring":
-            return [self.rh_A_RFJ4, self.rh_A_RFJ3, self.rh_A_RFJ0]
-        elif digit == "little":
-            return [self.rh_A_LFJ5, self.rh_A_LFJ4, self.rh_A_LFJ3, self.rh_A_LFJ0]
-        else:
-            raise ValueError(f"Invalid digit: {digit}")
+        raise NotImplementedError
 
 
 class ShadowHand:
@@ -214,6 +161,10 @@ class ShadowHand:
         model: mujoco.MjModel,
         data: mujoco.MjData,
         hand_type: str = "left",
+        kp: float = 0.5,
+        ki: float = 0.01,
+        kd: float = 0.001,
+        integral_clip: float = np.inf,
     ) -> None:
         """Initialize the Shadow Hand class."""
         self.model = model
@@ -221,9 +172,9 @@ class ShadowHand:
         mujoco.mj_kinematics(model, data)
 
         # PID controller parameters
-        self.kp = 0.5
-        self.ki = 0.01
-        self.kd = 0.001
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
 
         self.controllers = {
             "thumb": PIDController(self.kp, self.ki, self.kd),
@@ -233,6 +184,7 @@ class ShadowHand:
             "little": PIDController(self.kp, self.ki, self.kd),
         }
 
+        # TODO: make it posible to change this to the contact location
         self.digit_tips = (
             {
                 "thumb": "lh_th_tip",
@@ -268,17 +220,22 @@ class ShadowHand:
         }
 
         self.target_positions = {
-            "thumb": np.array([0.0, 0.0, 0.0]),
-            "index": np.array([0.0, 0.0, 0.0]),
-            "middle": np.array([0.0, 0.0, 0.0]),
-            "ring": np.array([0.0, 0.0, 0.0]),
-            "little": np.array([0.0, 0.0, 0.0]),
+            "thumb": np.zeros(3),
+            "index": np.zeros(3),
+            "middle": np.zeros(3),
+            "ring": np.zeros(3),
+            "little": np.zeros(3),
+        }
+        self.target_orientations = {
+            "thumb": None,
+            "index": None,
+            "middle": None,
+            "ring": None,
+            "little": None,
         }
 
         self.actuators = (
-            ShadowLeftHandActuators(model, data)
-            if hand_type == "left"
-            else ShadowRightHandActuators(model, data)
+            ShadowLeftHandActuators(model, data) if hand_type == "left" else ShadowRightHandActuators(model, data)
         )
 
     @classmethod
@@ -295,9 +252,7 @@ class ShadowHand:
 
     def update_digit_jacobian(self, digit: str) -> np.ndarray:
         """Get the Jacobian of the digit tip."""
-        assert (
-            digit in self.digit_tips.keys()
-        ), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
+        assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
 
         mujoco.mj_jac(
             self.model,
@@ -308,20 +263,36 @@ class ShadowHand:
             self.data.body(self.digit_tips[digit]).id,
         )
 
-    def move_digit_tips(
-        self, target_positions: dict, targer_orientations: dict
-    ) -> None:
-        """Move the digit tips to the target positions."""
-        # DEBUG: only move middle finger
-        
-        # First we update the Jacobians of the digit tips
+    def update_targets(self, target_positions: dict = None, target_orientations: dict = None) -> None:
+        """Set the target positions and orientations of the digit tips if provided."""
+        if target_positions is not None:
+            for digit, target_position in target_positions.items():
+                assert (
+                    digit in self.digit_tips.keys()
+                ), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
+                assert target_position.shape == (
+                    3,
+                ), f"Invalid target position shape: {target_position.shape}, must be (3,)"
+                self.target_positions[digit] = target_position
+
+        if target_orientations is not None:
+            for digit, target_orientation in target_orientations.items():
+                assert (
+                    digit in self.digit_tips.keys()
+                ), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
+                assert target_orientation.shape == (
+                    3,
+                ), f"Invalid target orientation shape: {target_orientation.shape}, must be (3,)"
+                self.target_orientations[digit] = target_orientation
+
+    def control_step(self) -> None:
+        """Apply a control step to the Shadow Hand actuators."""
         self.update_jacobians()
 
+        # Get the desired actuations for each digit
         desired_actuations = []
-        for digit, target_position in target_positions.items():
-            desired_actuations.append(
-                self.get_digit_tip_control(digit, target_position)
-            )
+        for digit in self.digit_tips.keys():
+            desired_actuations.append(self.get_digit_tip_control(digit))
 
         # TODO: Implement a proper averaging of the actuations
 
@@ -342,56 +313,52 @@ class ShadowHand:
     def get_digit_tip_control(
         self,
         digit: str,
-        target_position: np.ndarray,
-        target_orientation: np.ndarray = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Move the digit tip to the target position."""
-        assert (
-            digit in self.digit_tips.keys()
-        ), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
-        assert target_position.shape == (
-            3,
-        ), f"Invalid target position shape: {target_position.shape}, must be (3,)"
-        # assert target_orientation.shape == (
-        # 3,
-        # ), f"Invalid target orientation shape: {target_orientation.shape}, must be (4,)"
+        assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
+
+        target_position = self.target_positions[digit]
+        target_orientation = self.target_orientations[digit]
 
         digit_position = self.data.body(self.digit_tips[digit]).xpos.copy()
-        digit_orientation = quat2mat(
-            self.data.body(self.digit_tips[digit]).xquat.copy()
-        ) @ np.array([0.0, 0.0, 1.0])
+        digit_orientation = quat2mat(self.data.body(self.digit_tips[digit]).xquat.copy()) @ np.array([0.0, 0.0, 1.0])
 
-        log.debug(
-            f"Digit: {digit},\n Target Position: {target_position},\n Digit Position: {digit_position}"
-        )
-        log.debug(
-            f"Digit: {digit},\n Target Orientation: {target_orientation},\n Digit Orientation: {digit_orientation}"
-        )
-
+        # We first control the position and then the orientation in cartesian space
+        # If no target orientation is provided, we only control the position
+        # TODO: (optional) handle the case where the target orientation is not provided from the beginning
         cartesian_control_signal = self.controllers[digit].control(
             np.concatenate([target_position, target_orientation])
             if target_orientation is not None
             else target_position,
-            np.concatenate([digit_position, digit_orientation])
-            if target_orientation is not None
-            else digit_position,
+            np.concatenate([digit_position, digit_orientation]) if target_orientation is not None else digit_position,
         )
-        log.debug(f"Position Control Signal: {cartesian_control_signal}")
 
-        full_jacobian = np.concatenate(
-            [self.jacobians_translational[digit], self.jacobians_rotational[digit]],
-            axis=0,
-        ) if target_orientation is not None else self.jacobians_translational[digit]
+        # From the cartesian control signal, we go the control chain back to the actuators
+        # First we need to compute the joint control signal using the Jacobian
+        full_jacobian = (
+            np.concatenate(
+                [self.jacobians_translational[digit], self.jacobians_rotational[digit]],
+                axis=0,
+            )
+            if target_orientation is not None
+            else self.jacobians_translational[digit]
+        )
         joint_control_signal = np.linalg.pinv(full_jacobian) @ cartesian_control_signal
 
+        # Finally, we translate the joint control signal to the actuator control signal
+        actuator_control_signal = self.actuators.joint_to_actuator_mat @ joint_control_signal
+
+        log.debug("===============================================")
+        log.debug(f"Digit: {digit}")
+        log.debug(f"Target Position: {target_position}")
+        log.debug(f"Digit Position: {digit_position}")
+        log.debug(f"Target Orientation: {target_orientation}")
+        log.debug(f"Digit Orientation: {digit_orientation}")
+        log.debug("-----------------------------------------------")
+        log.debug(f"Cartesian Control Signal: {cartesian_control_signal}")
         log.debug(f"Joint Control Signal: {joint_control_signal}")
+        log.debug(f"Actuator Control Signal: {actuator_control_signal}")
 
-        # Translate the joint control signal to the actuator control signal
-        actuator_control_signal = (
-            self.actuators.joint_to_actuator_mat @ joint_control_signal
-        )
-
-        # Apply the actuator control signal to the actuators
         return actuator_control_signal
 
 
@@ -405,19 +372,24 @@ class PIDController:
         kd: float,
         integral_clip: float = 1000.0,
     ) -> None:
-        """Initialize the PID Controller class."""
+        """Initialize the PID Controller class.
+
+        Args:
+            kp: Proportional gain.
+            ki: Integral gain.
+            kd: Derivative gain.
+            integral_clip: Maximum value of the integral error.
+        """
         self.kp = kp
         self.ki = ki
         self.kd = kd
-
         self.integral_clip = integral_clip
+
         self.error = 0.0
         self.previous_error = 0.0
         self.intregral_error = 0.0
 
-    def control(
-        self, target_position: np.ndarray, current_position: np.ndarray
-    ) -> np.ndarray:
+    def control(self, target_position: np.ndarray, current_position: np.ndarray) -> np.ndarray:
         """Compute the control signal for the PID controller."""
         self.error = target_position - current_position
         self.intregral_error += self.error
