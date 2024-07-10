@@ -1,7 +1,7 @@
 # Hand manipulation
 Repository for a hand manipulation project from a course.
 
-![Hand video](media/index-finger-control.mp4)
+![Hand video](media/index-finger-control.gif)
 # Getting Started
 
 ## Using poetry
