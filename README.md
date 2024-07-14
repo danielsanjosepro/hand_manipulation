@@ -1,7 +1,8 @@
 # Hand manipulation
 Repository for a hand manipulation project from a course.
 
-![Hand video](media/index-finger-control.gif)
+![Allegro Hand video](media/allegro-hand.gif)
+![Shadow Hand video](media/index-finger-control.gif)
 # Getting Started
 
 ## Using poetry
@@ -19,7 +20,8 @@ poetry install
 3. Open a poetry shell (env) and give it a try.
 ```
 poetry shell
-python hand_manipulation/main.py
+python hand_manipulation/main_allegro.py
+# python hand_manipulation/main_shadow.py
 ```
 ## Docker
 
