@@ -78,6 +78,10 @@
         <joint axis="0 0 1" range="-0.47 0.47"/>
         <position ctrlrange="-0.47 0.47"/>
       </default>
+      <default class="palm">
+        <joint type="slide" pos="0 0 0" axis="0 -1 0" range="0.0 1.0" damping="0.1"/>
+        <position ctrlrange="0.0 1.0" kp="100" dampratio="1"/>
+      </default>
       <default class="proximal">
         <joint range="-0.196 1.61"/>
         <position ctrlrange="-0.196 1.61"/>
@@ -128,7 +132,9 @@
   </asset>
 
   <worldbody>
-    <body name="palm" quat="0.5 -0.5 0 0" childclass="allegro_left">
+    <body name="palm" pos="0 0 0" quat="0.5 -0.5 0 0" childclass="allegro_left">
+      <!--Actuator to move the hand up and down-->
+      <joint name="palmj0" class="palm"/>
       <geom quat="1 -1 0 0" class="palm_visual" mesh="base_link_left"/>
       <geom class="palm_collision"/>
       <!-- Ring finger -->
@@ -254,7 +260,9 @@
     <exclude body1="palm" body2="th_proximal"/>
   </contact>
 
+  <!--We now weld the hand to the grabbable object-->
   <actuator>
+    <position name="palma0" joint="palmj0" class="palm"/>
     <position name="ffa0" joint="ffj0" class="base"/>
     <position name="ffa1" joint="ffj1" class="proximal"/>
     <position name="ffa2" joint="ffj2" class="medial"/>
@@ -271,5 +279,5 @@
     <position name="tha1" joint="thj1" class="thumb_proximal"/>
     <position name="tha2" joint="thj2" class="thumb_medial"/>
     <position name="tha3" joint="thj3" class="thumb_distal"/>
-  </actuator>
+</actuator>
 </mujoco>

@@ -26,7 +26,7 @@ allegro_hand = AllegroHand(
     kp=1.0,
     # ki=0.0,
     # kd=0.0,
-    # integral_clip=0.1
+    integral_clip=0.1
 )
 
 simulation_duration = 1000.0  # seconds

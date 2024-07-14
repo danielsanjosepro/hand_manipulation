@@ -25,69 +25,14 @@ class AllegroLeftHandActuators:
         self,
         model: mujoco.MjModel,
         data: mujoco.MjData,
-        exclude_wrist: bool = True,
     ):
         """Initialize the Shadow Left Hand Actuators."""
         self.model = model
         self.data = data
-        self.n_actuators = model.nu
-        self.n_joints = model.njnt
 
-        self.actuator_to_joint = {
-            "ffa0": "ffj0",
-            "ffa1": "ffj1",
-            "ffa2": "ffj2",
-            "ffa3": "ffj3",
-            "mfa0": "mfj0",
-            "mfa1": "mfj1",
-            "mfa2": "mfj2",
-            "mfa3": "mfj3",
-            "rfa0": "rfj0",
-            "rfa1": "rfj1",
-            "rfa2": "rfj2",
-            "rfa3": "rfj3",
-            "tha0": "thj0",
-            "tha1": "thj1",
-            "tha2": "thj2",
-            "tha3": "thj3",
-        }
-
-        self.joint_to_actuator = {}
-        for actuator, joint in self.actuator_to_joint.items():
-            self.joint_to_actuator[joint] = actuator
-
-        self.actuator_to_joint_mat = None
-        self.joint_to_actuator_mat = None
-        self.initialize_actuator_to_joint_mat()
-        self.initialize_joint_to_actuator_mat()
-
-        log.debug(f"Number of actuators: {self.n_actuators}")
-        log.debug(f"Number of joints: {self.n_joints}")
-        log.debug(f"{self.actuator_to_joint_mat.shape}")
-        log.debug(f"{self.actuator_to_joint_mat}")
-        log.debug(f"{self.joint_to_actuator_mat.shape}")
-        log.debug(f"{self.joint_to_actuator_mat}")
-
-    def initialize_actuator_to_joint_mat(self):
-        """Initialize the actuator to joint matrix which maps actuator to joint space such that joint = A2J @ actuator.
-
-        Remark: The matrix is of shape (n_joints, n_actuators).
-        """
-        self.actuator_to_joint_mat = np.zeros((self.n_joints, self.n_actuators))
-
-        for actuator, joint in self.actuator_to_joint.items():
-            if isinstance(joint, list):
-                for j in joint:
-                    self.actuator_to_joint_mat[self.model.joint(j).id, self.model.actuator(actuator).id] = 1
-            else:
-                self.actuator_to_joint_mat[self.model.joint(joint).id, self.model.actuator(actuator).id] = 1
-
-    def initialize_joint_to_actuator_mat(self):
-        """Initialize the joint to actuator matrix which maps joint to actuator space such that actuator = J2A @ joint.
-
-        Remark: The matrix is of shape (n_actuators, n_joints).
-        """
-        self.joint_to_actuator_mat = np.linalg.pinv(self.actuator_to_joint_mat)
+    def get_actuator_speeds(self, joint_speeds: np.ndarray) -> np.ndarray:
+        """Get the actuator speeds from the joint speeds."""
+        return joint_speeds[self.j2a_ids[1:] - 1]
 
     def actuator_names(self, digit: str) -> List[str]:
         """Return the joint names of the digit."""
@@ -102,9 +47,26 @@ class AllegroLeftHandActuators:
         else:
             raise ValueError(f"Invalid digit: {digit}")
 
+    def joint_names(self, digit: str) -> List[str]:
+        """Return the joint names of the digit."""
+        if digit == "thumb":
+            return ["thj0", "thj1", "thj2", "thj3"]
+        elif digit == "index":
+            return ["ffj0", "ffj1", "ffj2", "ffj3"]
+        elif digit == "middle":
+            return ["mfj0", "mfj1", "mfj2", "mfj3"]
+        elif digit == "ring":
+            return ["rfj0", "rfj1", "rfj2", "rfj3"]
+        else:
+            raise ValueError(f"Invalid digit: {digit}")
+
     def actuators(self, digit: str) -> List[int]:
         """Get sorted actuator ids for a given digit."""
         return np.sort([self.model.actuator(actuator).id for actuator in self.actuator_names(digit)])
+
+    def joints(self, digit: str) -> List[int]:
+        """Get sorted joint ids for a given digit."""
+        return np.sort([self.model.joint(joint).id for joint in self.joint_names(digit)])
 
 
 class AllegroHand:
@@ -124,6 +86,7 @@ class AllegroHand:
         self.model = model
         self.data = data
         mujoco.mj_kinematics(model, data)
+        self.actuators = AllegroLeftHandActuators(model, data) if hand_type == "left" else None
 
         # PID controller parameters
         self.kp = kp
@@ -155,18 +118,17 @@ class AllegroHand:
         )
 
         self.jacobians_translational = {
-            "thumb": np.zeros((3, self.model.nv)),
-            "index": np.zeros((3, self.model.nv)),
-            "middle": np.zeros((3, self.model.nv)),
-            "ring": np.zeros((3, self.model.nv)),
-            "little": np.zeros((3, self.model.nv)),
+            "thumb": np.zeros((3, len(self.actuators.joints("thumb")))),
+            "index": np.zeros((3, len(self.actuators.joints("index")))),
+            "middle": np.zeros((3, len(self.actuators.joints("middle")))),
+            "ring": np.zeros((3, len(self.actuators.joints("ring")))),
         }
 
         self.jacobians_rotational = {
-            "thumb": np.zeros((3, self.model.nv)),
-            "index": np.zeros((3, self.model.nv)),
-            "middle": np.zeros((3, self.model.nv)),
-            "ring": np.zeros((3, self.model.nv)),
+            "thumb": np.zeros((3, len(self.actuators.joints("thumb")))),
+            "index": np.zeros((3, len(self.actuators.joints("index")))),
+            "middle": np.zeros((3, len(self.actuators.joints("middle")))),
+            "ring": np.zeros((3, len(self.actuators.joints("ring")))),
         }
 
         self.target_positions = {
@@ -181,8 +143,6 @@ class AllegroHand:
             "middle": None,
             "ring": None,
         }
-
-        self.actuators = AllegroLeftHandActuators(model, data) if hand_type == "left" else None
 
     @classmethod
     def from_xml_path(cls, xml_path: str) -> "AllegroHand":
@@ -200,14 +160,21 @@ class AllegroHand:
         """Get the Jacobian of the digit tip."""
         assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
 
+        jacobian_translational = np.zeros((3, self.model.nv))
+        jacobian_rotational = np.zeros((3, self.model.nv))
+
         mujoco.mj_jac(
             self.model,
             self.data,
-            self.jacobians_translational[digit],
-            self.jacobians_rotational[digit],
+            jacobian_translational,
+            jacobian_rotational,
             self.data.body(self.digit_tips[digit]).xpos,
             self.data.body(self.digit_tips[digit]).id,
         )
+
+        # We exclude the palm joints from the Jacobian
+        self.jacobians_translational[digit] = jacobian_translational[:, self.actuators.joints(digit)]
+        self.jacobians_rotational[digit] = jacobian_rotational[:, self.actuators.joints(digit)]
 
     def update_targets(self, target_positions: dict = None, target_orientations: dict = None) -> None:
         """Set the target positions and orientations of the digit tips if provided."""
@@ -236,14 +203,12 @@ class AllegroHand:
         self.update_jacobians()
 
         for digit in self.digit_tips.keys():
-            desired_actuation = self.get_digit_tip_control(digit)
-            actuator_ids = self.actuators.actuators(digit)
-            self.data.ctrl[actuator_ids] = desired_actuation[actuator_ids].copy()
+            self.control_digit_tip(digit)
 
-    def get_digit_tip_control(
+    def control_digit_tip(
         self,
         digit: str,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ):
         """Move the digit tip to the target position."""
         assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
 
@@ -275,8 +240,8 @@ class AllegroHand:
         )
         joint_speeds = np.linalg.pinv(full_jacobian) @ cartesian_twist
 
-        # Finally, we translate the joint control signal to the actuator control signal
-        actuator_speeds = self.actuators.joint_to_actuator_mat @ joint_speeds
+        # Finally, we translate the joint control signal to the proper actuator values
+        self.data.ctrl[self.actuators.actuators(digit)] = joint_speeds
 
         log.debug("===============================================")
         log.debug(f"Digit: {digit}")
@@ -287,6 +252,3 @@ class AllegroHand:
         log.debug("-----------------------------------------------")
         log.debug(f"Cartesian Control Signal: {cartesian_twist}")
         log.debug(f"Joint Control Signal: {joint_speeds}")
-        log.debug(f"Actuator Control Signal: {actuator_speeds}")
-
-        return actuator_speeds
