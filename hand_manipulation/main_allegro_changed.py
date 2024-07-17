@@ -6,6 +6,7 @@ from pathlib import Path
 
 import mujoco
 import mujoco.viewer
+import numpy as np
 
 from hands.allegro_hand import AllegroHand
 
@@ -41,7 +42,7 @@ def detect_contacts(data):
         geom1_id = contact.geom1
         geom2_id = contact.geom2
         # Use geom_id to name mapping if available
-        if "finger" in str(geom1_id) or "finger" in str(geom2_id):  # Example condition; adjust as needed
+        if "47" in str(geom1_id) or "47" in str(geom2_id):  
             contacts.append(contact)
     return contacts
     
@@ -99,7 +100,6 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         allegro_hand.update_targets(target_positions)
         allegro_hand.control_step()
 
-        mujoco.mj_step(model, data)
         
 #### Check for contacts
         contacts = detect_contacts(data)
@@ -111,6 +111,8 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
             grasp_controller(allegro_hand, grasp_matrix)
 
 #####
+        mujoco.mj_step(model, data)
+	
         # Pick up changes to the physics state, apply perturbations, update options from GUI.
         viewer.sync()
 
