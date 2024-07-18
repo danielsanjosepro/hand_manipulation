@@ -12,6 +12,7 @@ mujoco = "^3.1.6"
 ruff = "^0.5.1"
 rich = "^13.7.1"
 transforms3d = "^0.4.2"
+scipy = "^1.14.0"
 
 [tool.setuptools]
 packages = ["shadow_hand_grasping"]

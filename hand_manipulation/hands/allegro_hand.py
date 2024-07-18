@@ -8,7 +8,9 @@ from rich.logging import RichHandler
 import numpy as np
 from transforms3d.quaternions import quat2mat
 
+from utils.grasping import get_transposed_grasp_matrix
 from utils.control import PIDController
+from utils.mujoco_utils import MujocoModelNames
 
 # Set up the logging
 FORMAT = "%(message)s"
@@ -85,6 +87,8 @@ class AllegroHand:
         """Initialize the Allegro Hand class."""
         self.model = model
         self.data = data
+        self.model_names = MujocoModelNames(model)
+
         mujoco.mj_kinematics(model, data)
         self.actuators = AllegroLeftHandActuators(model, data) if hand_type == "left" else None
 
@@ -197,6 +201,37 @@ class AllegroHand:
                     3,
                 ), f"Invalid target orientation shape: {target_orientation.shape}, must be (3,)"
                 self.target_orientations[digit] = target_orientation
+
+    def check_contact(self) -> None:
+        """Check if any contact is detected."""
+        grasp_tilde_matrix_transposed = None
+        log.info("===============================================")
+        for contact in self.data.contact:
+            log.info(
+                f"Contact detected between {self.model_names.geom_id2name[contact.geom[0]]} and {self.model_names.geom_id2name[contact.geom[1]]}"
+            )
+            log.info(f"Contact position: {contact.pos}")
+            grasp_tilde_matrix_contact_transposed = get_transposed_grasp_matrix(contact)
+            grasp_tilde_matrix_transposed = (
+                grasp_tilde_matrix_contact_transposed
+                if grasp_tilde_matrix_transposed is None
+                else np.hstack([grasp_tilde_matrix_transposed, grasp_tilde_matrix_contact_transposed])
+            )
+
+        if grasp_tilde_matrix_transposed is not None:
+            log.info(f"Grasp Matrix Transposed: {grasp_tilde_matrix_transposed}")
+            B_hard = np.hstack([np.eye(3), np.zeros((3, 3))])
+            # Now we check if object graspable using the null space of the grasp matrix
+            grasp_matrix_transposed = B_hard @ grasp_tilde_matrix_transposed
+            log.info(f"Grasp Matrix: {grasp_matrix_transposed}")
+
+            # Check if the object is graspable
+            dim_null_space = 6 - np.linalg.matrix_rank(grasp_matrix_transposed.T)
+            if dim_null_space > 1:
+                log.info("Object is graspable")
+            else:
+                log.info("Object is not graspable")
+
 
     def control_step(self) -> None:
         """Apply a control step to the Shadow Hand actuators."""

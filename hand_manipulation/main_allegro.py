@@ -3,6 +3,7 @@
 import time
 import logging
 from pathlib import Path
+import numpy as np
 
 import mujoco
 import mujoco.viewer
@@ -11,8 +12,8 @@ from hands.allegro_hand import AllegroHand
 
 
 log = logging.getLogger("rich")
-log.setLevel(logging.DEBUG)
-# log.setLevel(logging.INFO)
+# log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 project_root = Path(__file__).parents[1]
 xml_path = str(project_root / "assets" / "allegro" / "scene_left.xml")
@@ -24,12 +25,12 @@ allegro_hand = AllegroHand(
     model=model,
     data=data,
     kp=1.0,
-    # ki=0.0,
-    # kd=0.0,
-    integral_clip=0.1
 )
 
 simulation_duration = 1000.0  # seconds
+contact_detected = False
+simulation_speed_up = 0.1  # Speed up the simulation by this factor.
+
 
 with mujoco.viewer.launch_passive(model, data) as viewer:
     start = time.time()
@@ -56,6 +57,7 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 
         # Our control cycle: we update the targets and control the hand with the new targets.
         allegro_hand.update_targets(target_positions)
+        allegro_hand.check_contact()
         allegro_hand.control_step()
 
         mujoco.mj_step(model, data)
@@ -64,6 +66,6 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.sync()
 
         # Rudimentary time keeping, will drift relative to wall clock.
-        time_until_next_step = model.opt.timestep - (time.time() - step_start)
+        time_until_next_step = model.opt.timestep / simulation_speed_up - (time.time() - step_start)
         if time_until_next_step > 0:
             time.sleep(time_until_next_step)

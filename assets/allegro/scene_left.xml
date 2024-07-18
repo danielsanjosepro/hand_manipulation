@@ -32,7 +32,7 @@
     <geom name="floor" pos="0 0 -0.1" size="0 0 0.05" type="plane" material="groundplane"/>
     <!-- We add a visual element as a mocap with one site as the target (cyllinder)-->
     <body name="target" pos="0.06 -0.02 0.0">
-        <freejoint/>
+        <!--<freejoint/>-->
         <geom class="target_cyllinder" name="target cyllinder" type="cylinder" size="0.03 0.1" pos="0 0 0" condim="6"/>
         <body name="thumb_target" pos="0.025 -0.025 0.08">
             <geom class="target"  type="sphere" size="0.005"/>

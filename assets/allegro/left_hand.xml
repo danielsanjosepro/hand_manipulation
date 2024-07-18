@@ -141,22 +141,22 @@
       <body name="rf_base" pos="0 0.0435 -0.001542" quat="0.999048 -0.0436194 0 0">
         <joint name="rfj0" class="base"/>
         <geom class="base_visual"/>
-        <geom class="base_collision"/>
+        <geom class="base_collision" name="rf_base_collision"/>
         <body name="rf_proximal" pos="0 0 0.0164">
           <joint name="rfj1" class="proximal"/>
           <geom class="proximal_visual"/>
-          <geom class="proximal_collision"/>
+          <geom class="proximal_collision" name="rf_proximal_collision"/>
           <body name="rf_medial" pos="0 0 0.054">
             <joint name="rfj2" class="medial"/>
             <geom class="medial_visual"/>
-            <geom class="medial_collision"/>
+            <geom class="medial_collision" name="rf_medial_collision"/>
             <body name="rf_distal" pos="0 0 0.0384">
               <joint name="rfj3" class="distal"/>
               <geom class="distal_visual"/>
-              <geom class="distal_collision"/>
+              <geom class="distal_collision" name="rf_distal_collision"/>
               <body name="rf_tip">
                 <geom class="fingertip_visual"/>
-                <geom class="fingertip_collision"/>
+                <geom class="fingertip_collision" name="rf_tip_collision"/>
                 <body name="rf_tip_top" pos="0 0 0.04">
                   <geom type="sphere" size="0.01" class="tip_top"/>
                 </body>
@@ -169,22 +169,22 @@
       <body name="mf_base" pos="0 0 0.0007">
         <joint name="mfj0" class="base"/>
         <geom class="base_visual"/>
-        <geom class="base_collision"/>
+        <geom class="base_collision" name="mf_base_collision"/>
         <body name="mf_proximal" pos="0 0 0.0164">
           <joint name="mfj1" class="proximal"/>
           <geom class="proximal_visual"/>
-          <geom class="proximal_collision"/>
+          <geom class="proximal_collision" name="mf_proximal_collision"/>
           <body name="mf_medial" pos="0 0 0.054">
             <joint name="mfj2" class="medial"/>
             <geom class="medial_visual"/>
-            <geom class="medial_collision"/>
+            <geom class="medial_collision" name="mf_medial_collision"/>
             <body name="mf_distal" pos="0 0 0.0384">
               <joint name="mfj3" class="distal"/>
               <geom class="distal_visual"/>
-              <geom class="distal_collision"/>
+              <geom class="distal_collision" name="mf_distal_collision"/>
               <body name="mf_tip">
                 <geom class="fingertip_visual"/>
-                <geom class="fingertip_collision"/>
+                <geom class="fingertip_collision" name="mf_tip_collision"/>
                 <body name="mf_tip_top" pos="0 0 0.04">
                     <geom type="sphere" size="0.01" class="tip_top"/>
                 </body>
@@ -197,22 +197,22 @@
       <body name="ff_base" pos="0 -0.0435 -0.001542" quat="0.999048 0.0436194 0 0">
         <joint name="ffj0" class="base"/>
         <geom class="base_visual"/>
-        <geom class="base_collision"/>
+        <geom class="base_collision" name="ff_base_collision"/>
         <body name="ff_proximal" pos="0 0 0.0164">
           <joint name="ffj1" class="proximal"/>
           <geom class="proximal_visual"/>
-          <geom class="proximal_collision"/>
+          <geom class="proximal_collision" name="ff_proximal_collision"/>
           <body name="ff_medial" pos="0 0 0.054">
             <joint name="ffj2" class="medial"/>
             <geom class="medial_visual"/>
-            <geom class="medial_collision"/>
+            <geom class="medial_collision" name="ff_medial_collision"/>
             <body name="ff_distal" pos="0 0 0.0384">
               <joint name="ffj3" class="distal"/>
               <geom class="distal_visual"/>
-              <geom class="distal_collision"/>
+              <geom class="distal_collision" name="ff_distal_collision"/>
               <body name="ff_tip">
                 <geom class="fingertip_visual"/>
-                <geom class="fingertip_collision"/>
+                <geom class="fingertip_collision" name="ff_tip_collision"/>
                 <body name="ff_tip_top" pos="0 0 0.04">
                     <geom type="sphere" size="0.01" class="tip_top"/>
                 </body>
@@ -225,22 +225,22 @@
       <body name="th_base" pos="-0.0182 -0.019333 -0.045987" quat="0.477714 0.521334 -0.521334 0.477714">
         <joint name="thj0" class="thumb_base"/>
         <geom quat="0 1 0 0" class="visual" mesh="link_12.0_left"/>
-        <geom class="thumb_base_collision"/>
+        <geom class="thumb_base_collision" name="thumb_base_collision"/>
         <body name="th_proximal" pos="-0.027 -0.005 0.0399">
           <joint name="thj1" class="thumb_proximal"/>
           <geom class="visual" mesh="link_13.0"/>
-          <geom class="thumb_proximal_collision"/>
+          <geom class="thumb_proximal_collision" name="thumb_proximal_collision"/>
           <body name="th_medial" pos="0 0 0.0177">
             <joint name="thj2" class="thumb_medial"/>
             <geom class="visual" mesh="link_14.0"/>
-            <geom class="thumb_medial_collision"/>
+            <geom class="thumb_medial_collision" name="thumb_medial_collision"/>
             <body name="th_distal" pos="0 0 0.0514">
               <joint name="thj3" class="thumb_distal"/>
               <geom class="visual" mesh="link_15.0"/>
-              <geom class="thumb_distal_collision"/>
+              <geom class="thumb_distal_collision" name="thumb_distal_collision"/>
               <body name="th_tip">
                 <geom class="thumbtip_visual"/>
-                <geom class="thumbtip_collision"/>
+                <geom class="thumbtip_collision" name="th_tip_collision"/>
                 <body name="th_tip_top" pos="0 0 0.06">
                     <geom type="sphere" size="0.01" class="tip_top"/>
                 </body>

@@ -424,3 +424,9 @@ WARNING: Linesearch objective is not convex
 Sun Jul 14 07:55:22 2024
 WARNING: Linesearch objective is not convex
 
+Wed Jul 17 17:42:25 2024
+ERROR: could not initialize GLFW
+
+Thu Jul 18 07:32:59 2024
+ERROR: could not initialize GLFW
+
