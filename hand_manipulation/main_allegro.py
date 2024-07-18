@@ -28,7 +28,6 @@ allegro_hand = AllegroHand(
 )
 
 simulation_duration = 1000.0  # seconds
-contact_detected = False
 simulation_speed_up = 0.1  # Speed up the simulation by this factor.
 
 
@@ -41,6 +40,7 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 
     while viewer.is_running() and time.time() - start < simulation_duration:
         step_start = time.time()
+
 
         # Set the fingers on the cylinder.
         target_thumb_position = data.body("thumb_target").xpos
@@ -59,7 +59,7 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         allegro_hand.update_targets(target_positions)
         allegro_hand.check_contact()
         allegro_hand.control_step()
-
+    
         mujoco.mj_step(model, data)
 
         # Pick up changes to the physics state, apply perturbations, update options from GUI.
