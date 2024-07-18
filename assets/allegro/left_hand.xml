@@ -136,7 +136,7 @@
       <!--Actuator to move the hand up and down-->
       <joint name="palmj0" class="palm"/>
       <geom quat="1 -1 0 0" class="palm_visual" mesh="base_link_left"/>
-      <geom class="palm_collision"/>
+      <geom class="palm_collision" name="palm_collision"/>
       <!-- Ring finger -->
       <body name="rf_base" pos="0 0.0435 -0.001542" quat="0.999048 -0.0436194 0 0">
         <joint name="rfj0" class="base"/>

@@ -6,6 +6,7 @@ from typing import List, Tuple
 import mujoco
 from rich.logging import RichHandler
 import numpy as np
+import scipy
 from transforms3d.quaternions import quat2mat
 
 from utils.grasping import get_transposed_grasp_matrix
@@ -211,7 +212,18 @@ class AllegroHand:
                 f"Contact detected between {self.model_names.geom_id2name[contact.geom[0]]} and {self.model_names.geom_id2name[contact.geom[1]]}"
             )
             log.info(f"Contact position: {contact.pos}")
-            grasp_tilde_matrix_contact_transposed = get_transposed_grasp_matrix(contact)
+
+            contact_geom0 = self.model_names.geom_id2name[contact.geom[0]]
+            contact_geom1 = self.model_names.geom_id2name[contact.geom[1]]
+
+            if contact_geom0 in ["floor"] or contact_geom1 in ["floor"]:
+                log.info("Contact with the floor. Skipping...")
+                continue
+            
+            position = contact.pos.copy()
+            normal = contact.frame[:3].copy() if "cylinder" in contact_geom0 else -contact.frame[:3].copy()
+
+            grasp_tilde_matrix_contact_transposed = get_transposed_grasp_matrix(position, normal)
             grasp_tilde_matrix_transposed = (
                 grasp_tilde_matrix_contact_transposed
                 if grasp_tilde_matrix_transposed is None
@@ -219,14 +231,17 @@ class AllegroHand:
             )
 
         if grasp_tilde_matrix_transposed is not None:
-            log.info(f"Grasp Matrix Transposed: {grasp_tilde_matrix_transposed}")
+            log.info(f"Grasp Matrix Transposed: {grasp_tilde_matrix_transposed} with shape {grasp_tilde_matrix_transposed.shape}")
             B_hard = np.hstack([np.eye(3), np.zeros((3, 3))])
-            # Now we check if object graspable using the null space of the grasp matrix
+
             grasp_matrix_transposed = B_hard @ grasp_tilde_matrix_transposed
-            log.info(f"Grasp Matrix: {grasp_matrix_transposed}")
+            log.info(f"Grasp Matrix: {grasp_matrix_transposed} with shape {grasp_matrix_transposed.shape}")
+            grasp_matrix = grasp_matrix_transposed.T
 
             # Check if the object is graspable
-            dim_null_space = 6 - np.linalg.matrix_rank(grasp_matrix_transposed.T)
+            dim_null_space = scipy.linalg.null_space(grasp_matrix).shape[1]
+            log.info(f" Dimension of null space: {dim_null_space}")
+            
             if dim_null_space > 1:
                 log.info("Object is graspable")
             else:

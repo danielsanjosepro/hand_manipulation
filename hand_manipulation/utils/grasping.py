@@ -2,32 +2,31 @@
 
 import numpy as np
 
-from mujoco import MjContact
 from scipy.spatial.transform import Rotation
 
 
+def get_rotation_matrix_from_normal(normal: np.ndarray, stacked: bool = False) -> np.ndarray:
+    """Get rotation matrix from normal vector."""
+    R = Rotation.align_vectors(normal, np.array([1, 0, 0]))[0].as_matrix()
+    return np.vstack([np.hstack([R, np.zeros((3, 3))]), np.hstack([np.zeros((3, 3)), R])]) if stacked else R
+
+
 def get_transposed_grasp_matrix(
-    contact: MjContact,
+    position: np.ndarray,
+    object_position: np.ndarray,
+    normal: np.ndarray,
 ) -> np.ndarray:
     """Get transposed grasp matrix. based on the contact information."""
-    position = contact.pos.copy()
-    normal = contact.frame[:3].copy()
+    r_obj_c = position - object_position
 
-    R = Rotation.align_vectors(normal, np.array([1, 0, 0]))[0].as_matrix()
-    S = skew(position)
+    S = skew(r_obj_c)
     P = np.vstack(
         [
             np.hstack([np.eye(3), np.zeros((3, 3))]),
             np.hstack([S, np.eye(3)]),
         ]
     )
-    R_T_stacked = np.vstack(
-        [
-            np.hstack([R.T, np.zeros((3, 3))]),
-            np.hstack([np.zeros((3, 3)), R.T]),
-        ]
-    )
-
+    R_T_stacked = get_rotation_matrix_from_normal(normal, stacked=True).T
     return R_T_stacked @ P.T
 
 
