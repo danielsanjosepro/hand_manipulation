@@ -56,8 +56,8 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         }
 
         # Our control cycle: we update the targets and control the hand with the new targets.
-        allegro_hand.update_targets(target_positions)
         allegro_hand.check_contact()
+        allegro_hand.update_targets(target_positions)
         allegro_hand.control_step()
     
         mujoco.mj_step(model, data)

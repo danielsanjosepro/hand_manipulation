@@ -206,46 +206,35 @@ class AllegroHand:
     def check_contact(self) -> None:
         """Check if any contact is detected."""
         grasp_tilde_matrix_transposed = None
-        log.info("===============================================")
-        for contact in self.data.contact:
-            log.info(
-                f"Contact detected between {self.model_names.geom_id2name[contact.geom[0]]} and {self.model_names.geom_id2name[contact.geom[1]]}"
-            )
-            log.info(f"Contact position: {contact.pos}")
+        grasp_matrix_transposed = None
+        B_hard = np.hstack([np.eye(3), np.zeros((3, 3))])
 
+        object_center = self.data.body("target").xpos
+
+        for contact in self.data.contact:
             contact_geom0 = self.model_names.geom_id2name[contact.geom[0]]
             contact_geom1 = self.model_names.geom_id2name[contact.geom[1]]
 
             if contact_geom0 in ["floor"] or contact_geom1 in ["floor"]:
-                log.info("Contact with the floor. Skipping...")
                 continue
-            
+
             position = contact.pos.copy()
             normal = contact.frame[:3].copy() if "cylinder" in contact_geom0 else -contact.frame[:3].copy()
 
-            grasp_tilde_matrix_contact_transposed = get_transposed_grasp_matrix(position, normal)
+            grasp_tilde_matrix_contact_transposed = get_transposed_grasp_matrix(position, object_center, normal)
             grasp_tilde_matrix_transposed = (
                 grasp_tilde_matrix_contact_transposed
                 if grasp_tilde_matrix_transposed is None
                 else np.hstack([grasp_tilde_matrix_transposed, grasp_tilde_matrix_contact_transposed])
             )
+            grasp_matrix_transposed = (
+                B_hard @ grasp_tilde_matrix_contact_transposed
+                if grasp_matrix_transposed is None
+                else np.hstack([grasp_matrix_transposed, B_hard @ grasp_tilde_matrix_contact_transposed])
+            )
 
         if grasp_tilde_matrix_transposed is not None:
-            log.info(f"Grasp Matrix Transposed: {grasp_tilde_matrix_transposed} with shape {grasp_tilde_matrix_transposed.shape}")
-            B_hard = np.hstack([np.eye(3), np.zeros((3, 3))])
-
-            grasp_matrix_transposed = B_hard @ grasp_tilde_matrix_transposed
-            log.info(f"Grasp Matrix: {grasp_matrix_transposed} with shape {grasp_matrix_transposed.shape}")
             grasp_matrix = grasp_matrix_transposed.T
-
-            # Check if the object is graspable
-            dim_null_space = scipy.linalg.null_space(grasp_matrix).shape[1]
-            log.info(f" Dimension of null space: {dim_null_space}")
-            
-            if dim_null_space > 1:
-                log.info("Object is graspable")
-            else:
-                log.info("Object is not graspable")
 
 
     def control_step(self) -> None:
