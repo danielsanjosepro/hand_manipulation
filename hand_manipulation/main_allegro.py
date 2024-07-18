@@ -24,11 +24,14 @@ data = mujoco.MjData(model)
 allegro_hand = AllegroHand(
     model=model,
     data=data,
-    kp=1.0,
+    kp=0.05,
+    ki=0.0,
+    kd=0.01,
 )
 
+
 simulation_duration = 1000.0  # seconds
-simulation_speed_up = 0.1  # Speed up the simulation by this factor.
+simulation_speed_up = 1  # Speed up the simulation by this factor.
 
 
 with mujoco.viewer.launch_passive(model, data) as viewer:
@@ -37,6 +40,8 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     # Activate the contact points in the viewer.
     with viewer.lock():
         viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = True
+        viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = True
+        viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_TRANSPARENT] = True
 
     while viewer.is_running() and time.time() - start < simulation_duration:
         step_start = time.time()

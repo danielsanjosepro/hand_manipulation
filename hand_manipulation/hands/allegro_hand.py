@@ -6,7 +6,6 @@ from typing import List, Tuple
 import mujoco
 from rich.logging import RichHandler
 import numpy as np
-import scipy
 from transforms3d.quaternions import quat2mat
 
 from utils.grasping import get_transposed_grasp_matrix
@@ -105,35 +104,11 @@ class AllegroHand:
             "ring": PIDController(self.kp, self.ki, self.kd),
         }
 
-        # TODO: make it posible to change this to the contact location
-        self.digit_tips = (
-            {
-                "thumb": "th_tip_top",
-                "index": "ff_tip_top",
-                "middle": "mf_tip_top",
-                "ring": "rf_tip_top",
-            }
-            if hand_type == "left"
-            else {
-                "thumb": "rh_th_tip",
-                "index": "rh_ff_tip",
-                "middle": "rh_mf_tip",
-                "ring": "rh_rf_tip",
-            }
-        )
-
-        self.jacobians_translational = {
-            "thumb": np.zeros((3, len(self.actuators.joints("thumb")))),
-            "index": np.zeros((3, len(self.actuators.joints("index")))),
-            "middle": np.zeros((3, len(self.actuators.joints("middle")))),
-            "ring": np.zeros((3, len(self.actuators.joints("ring")))),
-        }
-
-        self.jacobians_rotational = {
-            "thumb": np.zeros((3, len(self.actuators.joints("thumb")))),
-            "index": np.zeros((3, len(self.actuators.joints("index")))),
-            "middle": np.zeros((3, len(self.actuators.joints("middle")))),
-            "ring": np.zeros((3, len(self.actuators.joints("ring")))),
+        self.digit_tips = {
+            "thumb": "th_tip_top",
+            "index": "ff_tip_top",
+            "middle": "mf_tip_top",
+            "ring": "rf_tip_top",
         }
 
         self.target_positions = {
@@ -142,12 +117,15 @@ class AllegroHand:
             "middle": np.zeros(3),
             "ring": np.zeros(3),
         }
+
         self.target_orientations = {
             "thumb": None,
             "index": None,
             "middle": None,
             "ring": None,
         }
+
+        self.grasp_matrix = None
 
     @classmethod
     def from_xml_path(cls, xml_path: str) -> "AllegroHand":
@@ -156,30 +134,28 @@ class AllegroHand:
         data = mujoco.MjData(model)
         return cls(model, data)
 
-    def update_jacobians(self) -> None:
-        """Update the Jacobians of the digit tips."""
-        for digit in self.digit_tips.keys():
-            self.update_digit_jacobian(digit)
-
-    def update_digit_jacobian(self, digit: str) -> np.ndarray:
+    def get_digit_jacobian(
+        self,
+        digit: str,
+        pos: np.ndarray = None,
+        id: int = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """Get the Jacobian of the digit tip."""
         assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
+        if pos is None:
+            pos = self.data.body(self.digit_tips[digit]).xpos.copy()
+        if id is None:
+            id = self.data.body(self.digit_tips[digit]).id
 
         jacobian_translational = np.zeros((3, self.model.nv))
         jacobian_rotational = np.zeros((3, self.model.nv))
 
-        mujoco.mj_jac(
-            self.model,
-            self.data,
-            jacobian_translational,
-            jacobian_rotational,
-            self.data.body(self.digit_tips[digit]).xpos,
-            self.data.body(self.digit_tips[digit]).id,
-        )
+        mujoco.mj_jac(self.model, self.data, jacobian_translational, jacobian_rotational, pos, id)
 
-        # We exclude the palm joints from the Jacobian
-        self.jacobians_translational[digit] = jacobian_translational[:, self.actuators.joints(digit)]
-        self.jacobians_rotational[digit] = jacobian_rotational[:, self.actuators.joints(digit)]
+        # We only return the relevant columns of the Jacobian corresponding to the digit joints
+        return jacobian_translational[:, self.actuators.joints(digit)], jacobian_rotational[
+            :, self.actuators.joints(digit)
+        ]
 
     def update_targets(self, target_positions: dict = None, target_orientations: dict = None) -> None:
         """Set the target positions and orientations of the digit tips if provided."""
@@ -234,13 +210,10 @@ class AllegroHand:
             )
 
         if grasp_tilde_matrix_transposed is not None:
-            grasp_matrix = grasp_matrix_transposed.T
-
+            self.grasp_matrix = grasp_matrix_transposed.T
 
     def control_step(self) -> None:
-        """Apply a control step to the Shadow Hand actuators."""
-        self.update_jacobians()
-
+        """Apply a control step to the Allegro Hand actuators."""
         for digit in self.digit_tips.keys():
             self.control_digit_tip(digit)
 
@@ -259,7 +232,7 @@ class AllegroHand:
 
         # We first control the position and then the orientation in cartesian space
         # If no target orientation is provided, we only control the position
-        # TODO: (optional) handle the case where the target orientation is not provided from the beginning
+
         cartesian_twist = self.controllers[digit].control(
             np.concatenate([target_position, target_orientation])
             if target_orientation is not None
@@ -269,13 +242,14 @@ class AllegroHand:
 
         # From the cartesian control signal, we go the control chain back to the actuators
         # First we need to compute the joint control signal using the Jacobian
+        jacobian_translational, jacobian_rotational = self.get_digit_jacobian(digit)
         full_jacobian = (
             np.concatenate(
-                [self.jacobians_translational[digit], self.jacobians_rotational[digit]],
+                [jacobian_translational, jacobian_rotational],
                 axis=0,
             )
             if target_orientation is not None
-            else self.jacobians_translational[digit]
+            else jacobian_translational
         )
         joint_speeds = np.linalg.pinv(full_jacobian) @ cartesian_twist
 
