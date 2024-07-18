@@ -8,7 +8,7 @@ from rich.logging import RichHandler
 import numpy as np
 from transforms3d.quaternions import quat2mat
 
-from utils.grasping import get_transposed_grasp_matrix
+from utils.grasping import get_rotation_matrix_from_normal, get_transposed_grasp_matrix
 from utils.control import PIDController
 from utils.mujoco_utils import MujocoModelNames
 
@@ -88,9 +88,22 @@ class AllegroHand:
         self.model = model
         self.data = data
         self.model_names = MujocoModelNames(model)
+        log.info(f"Joint names: {self.model_names.joint_names}")
+        log.info(f"Joint names length: {len(self.model_names.joint_names)}")
+        log.info(f"Body names: {self.model_names.body_names}")
+        log.info(f"Body names length: {len(self.model_names.body_names)}")
+        log.info(f"Geom names: {self.model_names.geom_names}")
+        log.info(f"Geom names length: {len(self.model_names.geom_names)}")
+        log.info(f"Actuator names: {self.model_names.actuator_names}")
+        log.info(f"Actuator names length: {len(self.model_names.actuator_names)}")
+
 
         mujoco.mj_kinematics(model, data)
         self.actuators = AllegroLeftHandActuators(model, data) if hand_type == "left" else None
+
+        # State machine to change between position and torque control
+        self.state = "position_control"
+        self.time_of_contact = 0
 
         # PID controller parameters
         self.kp = kp
@@ -125,6 +138,10 @@ class AllegroHand:
             "ring": None,
         }
 
+        self.desired_object_twist = np.zeros(6)
+        self.desired_object_twist[3] = 0.0
+        self.target_twists = []
+
         self.grasp_matrix = None
 
     @classmethod
@@ -134,53 +151,91 @@ class AllegroHand:
         data = mujoco.MjData(model)
         return cls(model, data)
 
-    def get_digit_jacobian(
-        self,
-        digit: str,
-        pos: np.ndarray = None,
-        id: int = None,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Get the Jacobian of the digit tip."""
-        assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
-        if pos is None:
-            pos = self.data.body(self.digit_tips[digit]).xpos.copy()
-        if id is None:
-            id = self.data.body(self.digit_tips[digit]).id
-
+    def get_full_jacobian(self, pos: np.ndarray, id: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Get the full Jacobian of the hand at a given position and body id."""
         jacobian_translational = np.zeros((3, self.model.nv))
         jacobian_rotational = np.zeros((3, self.model.nv))
 
         mujoco.mj_jac(self.model, self.data, jacobian_translational, jacobian_rotational, pos, id)
+
+        # We remove the 6 last elements which correspond to the object freejoint dof
+        return jacobian_translational[:, :17], jacobian_rotational[:, :17]
+
+    def get_digit_jacobian(
+        self,
+        digit: str,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Get the Jacobian of the digit tip."""
+        assert digit in self.digit_tips.keys(), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
+        pos = self.data.body(self.digit_tips[digit]).xpos.copy()
+        id = self.data.body(self.digit_tips[digit]).id
+
+        jacobian_translational, jacobian_rotational = self.get_full_jacobian(pos, id)
 
         # We only return the relevant columns of the Jacobian corresponding to the digit joints
         return jacobian_translational[:, self.actuators.joints(digit)], jacobian_rotational[
             :, self.actuators.joints(digit)
         ]
 
-    def update_targets(self, target_positions: dict = None, target_orientations: dict = None) -> None:
-        """Set the target positions and orientations of the digit tips if provided."""
-        if target_positions is not None:
-            for digit, target_position in target_positions.items():
-                assert (
-                    digit in self.digit_tips.keys()
-                ), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
-                assert target_position.shape == (
-                    3,
-                ), f"Invalid target position shape: {target_position.shape}, must be (3,)"
-                self.target_positions[digit] = target_position
+    def update(self) -> None:
+        """Change the state of the hand based on the current contact points and update the target positions/twist."""
+        log.info("===============================================")
+        log.info(f"State: {self.state}")
 
-        if target_orientations is not None:
-            for digit, target_orientation in target_orientations.items():
-                assert (
-                    digit in self.digit_tips.keys()
-                ), f"Invalid digit: {digit}, must be one of {self.digit_tips.keys()}"
-                assert target_orientation.shape == (
-                    3,
-                ), f"Invalid target orientation shape: {target_orientation.shape}, must be (3,)"
-                self.target_orientations[digit] = target_orientation
 
-    def check_contact(self) -> None:
-        """Check if any contact is detected."""
+        # State machine switching
+        if self.state == "position_control" and self.data.ncon > 0:
+            self.state = "position_control_in_contact"
+            self.time_of_contact = self.data.time
+
+        if self.state == "position_control_in_contact" and self.data.ncon == 0:
+            self.state = "position_control"
+
+        if self.state == "position_control_in_contact" and self.data.time - self.time_of_contact > 5.0:
+            self.state = "object_control"
+
+        # Update the target positions and orientations
+        if self.state == "position_control" or self.state == "position_control_in_contact":
+            self.target_positions["thumb"] = self.data.body("thumb_target").xpos
+            self.target_positions["index"] = self.data.body("index_target").xpos
+            self.target_positions["middle"] = self.data.body("middle_target").xpos
+            self.target_positions["ring"] = self.data.body("ring_target").xpos
+        elif self.state == "object_control":
+            object_center = self.data.body("target").xpos
+
+            for i, contact in enumerate(self.data.contact):
+                contact_geom0 = self.model_names.geom_id2name[contact.geom[0]]
+                contact_geom1 = self.model_names.geom_id2name[contact.geom[1]]
+
+                if contact_geom0 in ["floor"] or contact_geom1 in ["floor"]:
+                    continue
+
+                contact_geom_finger = contact_geom1 if "cylinder" in contact_geom0 else contact_geom0
+
+                position = contact.pos.copy()
+                normal = contact.frame[:3].copy() if "cylinder" in contact_geom0 else -contact.frame[:3].copy()
+
+                grasp_tilde_matrix_transposed = get_transposed_grasp_matrix(position, object_center, normal)
+                # R = get_rotation_matrix_from_normal(normal)
+                # grap_matrix_transposed = B_hard @ grasp_tilde_matrix_transposed
+
+                R = get_rotation_matrix_from_normal(normal, stacked=True)
+                target_twist_contact = R @ grasp_tilde_matrix_transposed @ self.desired_object_twist
+
+                # Remove the "collision" string from the contact_geom_finger at the end of the name
+                body_name = contact_geom_finger[:-len("_collision")]
+                body_id = self.data.body(body_name).id
+
+                self.target_twists.append(
+                    {
+                        "body_id": body_id,
+                        "position": position,
+                        "target_twist": target_twist_contact,
+                    }
+                )
+
+    def compute_grasp_matrix(self) -> None:
+        """Used to comute the grasp matrix from the contact points."""
         grasp_tilde_matrix_transposed = None
         grasp_matrix_transposed = None
         B_hard = np.hstack([np.eye(3), np.zeros((3, 3))])
@@ -212,10 +267,39 @@ class AllegroHand:
         if grasp_tilde_matrix_transposed is not None:
             self.grasp_matrix = grasp_matrix_transposed.T
 
+        log.info(f"Grasp Matrix: {self.grasp_matrix}")
+
     def control_step(self) -> None:
         """Apply a control step to the Allegro Hand actuators."""
-        for digit in self.digit_tips.keys():
-            self.control_digit_tip(digit)
+        if self.state == "position_control" or self.state == "position_control_in_contact":
+            for digit in self.digit_tips.keys():
+                self.control_digit_tip(digit)
+        elif self.state == "object_control":
+            self.control_object()
+
+
+    def control_object(self) -> None:
+        """Control the object using the computed grasp matrix."""
+        for target_twist in self.target_twists:
+            body_id = target_twist["body_id"]
+            position = target_twist["position"]
+            target_twist = target_twist["target_twist"]
+
+            jacobian_translational, jacobian_rotational = self.get_full_jacobian(position, body_id)
+
+            full_jacobian = np.concatenate([jacobian_translational, jacobian_rotational], axis=0)
+            joint_speeds = np.linalg.pinv(full_jacobian) @ target_twist
+
+            self.data.ctrl += joint_speeds
+
+            log.debug("===============================================")
+            log.debug(f"Body ID: {body_id}")
+            log.debug(f"Position: {position}")
+            log.debug(f"Target Twist: {target_twist}")
+            log.debug("-----------------------------------------------")
+            log.debug(f"Joint Control Signal: {joint_speeds}")
+
+        self.target_twists = []
 
     def control_digit_tip(
         self,

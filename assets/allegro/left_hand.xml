@@ -229,15 +229,15 @@
         <body name="th_proximal" pos="-0.027 -0.005 0.0399">
           <joint name="thj1" class="thumb_proximal"/>
           <geom class="visual" mesh="link_13.0"/>
-          <geom class="thumb_proximal_collision" name="thumb_proximal_collision"/>
+          <geom class="thumb_proximal_collision" name="th_proximal_collision"/>
           <body name="th_medial" pos="0 0 0.0177">
             <joint name="thj2" class="thumb_medial"/>
             <geom class="visual" mesh="link_14.0"/>
-            <geom class="thumb_medial_collision" name="thumb_medial_collision"/>
+            <geom class="thumb_medial_collision" name="th_medial_collision"/>
             <body name="th_distal" pos="0 0 0.0514">
               <joint name="thj3" class="thumb_distal"/>
               <geom class="visual" mesh="link_15.0"/>
-              <geom class="thumb_distal_collision" name="thumb_distal_collision"/>
+              <geom class="thumb_distal_collision" name="th_distal_collision"/>
               <body name="th_tip">
                 <geom class="thumbtip_visual"/>
                 <geom class="thumbtip_collision" name="th_tip_collision"/>
