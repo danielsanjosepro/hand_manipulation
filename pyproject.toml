@@ -14,6 +14,8 @@ rich = "^13.7.1"
 transforms3d = "^0.4.2"
 scipy = "^1.14.0"
 pytest = "^8.2.2"
+qrcode = "^7.4.2"
+pillow = "^10.4.0"
 
 [tool.setuptools]
 packages = ["shadow_hand_grasping"]
