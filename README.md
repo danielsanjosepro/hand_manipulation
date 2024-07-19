@@ -1,7 +1,7 @@
 # Hand manipulation
 Repository for a hand manipulation project from a course.
 
-🚧🚧 MORE COMING SOON 🚧🚧
+# 🚧🚧 MORE COMING SOON 🚧🚧
 
 ![Allegro Hand video](media/allegro-hand.gif)
 ![Shadow Hand video](media/index-finger-control.gif)
