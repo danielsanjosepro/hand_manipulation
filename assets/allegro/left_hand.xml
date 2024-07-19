@@ -225,7 +225,7 @@
       <body name="th_base" pos="-0.0182 -0.019333 -0.045987" quat="0.477714 0.521334 -0.521334 0.477714">
         <joint name="thj0" class="thumb_base"/>
         <geom quat="0 1 0 0" class="visual" mesh="link_12.0_left"/>
-        <geom class="thumb_base_collision" name="thumb_base_collision"/>
+        <geom class="thumb_base_collision" name="th_base_collision"/>
         <body name="th_proximal" pos="-0.027 -0.005 0.0399">
           <joint name="thj1" class="thumb_proximal"/>
           <geom class="visual" mesh="link_13.0"/>

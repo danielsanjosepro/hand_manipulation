@@ -83,6 +83,7 @@ class AllegroHand:
         ki: float = 0.01,
         kd: float = 0.001,
         integral_clip: float = np.inf,
+        only_position_control: bool = False,
     ) -> None:
         """Initialize the Allegro Hand class."""
         self.model = model
@@ -104,6 +105,7 @@ class AllegroHand:
         # State machine to change between position and torque control
         self.state = "position_control"
         self.time_of_contact = 0
+        self.only_position_control = only_position_control
 
         # PID controller parameters
         self.kp = kp
@@ -138,11 +140,12 @@ class AllegroHand:
             "ring": None,
         }
 
-        self.desired_object_twist = np.zeros(6)
-        self.desired_object_twist[3] = 0.0
-        self.target_twists = []
+        # self.desired_object_twist = np.zeros(6)
+        # self.desired_object_twist[3] = 0.0
+        # self.target_twists = []
 
-        self.grasp_matrix = None
+        self.target_contacts = []
+
 
     @classmethod
     def from_xml_path(cls, xml_path: str) -> "AllegroHand":
@@ -179,11 +182,6 @@ class AllegroHand:
 
     def update(self) -> None:
         """Change the state of the hand based on the current contact points and update the target positions/twist."""
-        log.info("===============================================")
-        log.info(f"State: {self.state}")
-
-
-        # State machine switching
         if self.state == "position_control" and self.data.ncon > 0:
             self.state = "position_control_in_contact"
             self.time_of_contact = self.data.time
@@ -201,38 +199,68 @@ class AllegroHand:
             self.target_positions["middle"] = self.data.body("middle_target").xpos
             self.target_positions["ring"] = self.data.body("ring_target").xpos
         elif self.state == "object_control":
-            object_center = self.data.body("target").xpos
-
             for i, contact in enumerate(self.data.contact):
                 contact_geom0 = self.model_names.geom_id2name[contact.geom[0]]
                 contact_geom1 = self.model_names.geom_id2name[contact.geom[1]]
 
+
                 if contact_geom0 in ["floor"] or contact_geom1 in ["floor"]:
                     continue
+
+                sign = - 1 if "cylinder" in contact_geom0 else 1
 
                 contact_geom_finger = contact_geom1 if "cylinder" in contact_geom0 else contact_geom0
 
                 position = contact.pos.copy()
-                normal = contact.frame[:3].copy() if "cylinder" in contact_geom0 else -contact.frame[:3].copy()
+                normal = sign * contact.frame[:3].copy()
 
-                grasp_tilde_matrix_transposed = get_transposed_grasp_matrix(position, object_center, normal)
-                # R = get_rotation_matrix_from_normal(normal)
-                # grap_matrix_transposed = B_hard @ grasp_tilde_matrix_transposed
+                contact_wrench_in_contact_frame = np.zeros(6)
+                mujoco.mj_contactForce(self.model, self.data, i, contact_wrench_in_contact_frame)
+                contact_wrench = get_rotation_matrix_from_normal(normal, stacked=True) @ (sign * contact_wrench_in_contact_frame)
 
-                R = get_rotation_matrix_from_normal(normal, stacked=True)
-                target_twist_contact = R @ grasp_tilde_matrix_transposed @ self.desired_object_twist
-
-                # Remove the "collision" string from the contact_geom_finger at the end of the name
                 body_name = contact_geom_finger[:-len("_collision")]
                 body_id = self.data.body(body_name).id
 
-                self.target_twists.append(
-                    {
-                        "body_id": body_id,
-                        "position": position,
-                        "target_twist": target_twist_contact,
-                    }
-                )
+                # Check if target is already in the list
+                for i, target_contact in enumerate(self.target_contacts):
+                    if target_contact["body_id"] == body_id:
+                        target_contact["contact_wrench"] = contact_wrench
+                        target_contact["normal"] = normal
+                        target_contact["position"] = position
+                        target_contact["mu"] = contact.mu
+                        break
+                else:
+                    log.info(f"Adding new contact: {body_name}")
+                    self.target_contacts.append(
+                        {
+                            "body_id": body_id,
+                            "position": position,
+                            "normal": normal,
+                            "contact_wrench": contact_wrench,
+                            "mu": contact.mu,
+                            "controller": PIDController(0.001, 0.0, 0.000),  # PID controller for the force control
+                            "previous_signal": 0.01, # Previous signal of the PID controller
+                        }
+                    )
+
+                # grasp_tilde_matrix_transposed = get_transposed_grasp_matrix(position, object_center, normal)
+                # # R = get_rotation_matrix_from_normal(normal)
+                # # grap_matrix_transposed = B_hard @ grasp_tilde_matrix_transposed
+
+                # R = get_rotation_matrix_from_normal(normal, stacked=True)
+                # target_twist_contact = R @ grasp_tilde_matrix_transposed @ self.desired_object_twist
+
+                # # Remove the "collision" string from the contact_geom_finger at the end of the name
+                # body_name = contact_geom_finger[:-len("_collision")]
+                # body_id = self.data.body(body_name).id
+
+                # self.target_twists.append(
+                    # {
+                        # "body_id": body_id,
+                        # "position": position,
+                        # "target_twist": target_twist_contact,
+                    # }
+                # )
 
     def compute_grasp_matrix(self) -> None:
         """Used to comute the grasp matrix from the contact points."""
@@ -279,27 +307,42 @@ class AllegroHand:
 
 
     def control_object(self) -> None:
-        """Control the object using the computed grasp matrix."""
-        for target_twist in self.target_twists:
-            body_id = target_twist["body_id"]
-            position = target_twist["position"]
-            target_twist = target_twist["target_twist"]
+        """Control the object so that it does not slip."""
+        mass = 1.0
+        g = 9.81
+        safety_factor = 3.0
+        load = mass * g * safety_factor
+        center_object = self.data.body("target").xpos
 
+        joint_speeds_total = np.zeros(16)
+        for target_contact in self.target_contacts:
+            body_id = target_contact["body_id"]
+            position = target_contact["position"]
+            normal = target_contact["normal"]
+            contact_wrench = target_contact["contact_wrench"]
+            mu = target_contact["mu"]
+            pid_controller = target_contact["controller"]
+            previous_signal = target_contact["previous_signal"]
+
+            center_object_contact = center_object 
+            center_object_contact[2] = position[2]
+            direction = center_object_contact - position
+            direction /= np.linalg.norm(direction)
+
+            # We press in the direction of the normal until the wrench in the z direction cancels the gravity
             jacobian_translational, jacobian_rotational = self.get_full_jacobian(position, body_id)
 
-            full_jacobian = np.concatenate([jacobian_translational, jacobian_rotational], axis=0)
-            joint_speeds = np.linalg.pinv(full_jacobian) @ target_twist
 
-            self.data.ctrl += joint_speeds
+            target_force = load * mu / len(self.target_contacts)
+            current_force = np.linalg.norm(contact_wrench[:3])
+            control_signal = pid_controller.control(target_position=target_force, current_position=current_force)
+            current_signal = previous_signal + control_signal
+            
+            joint_speeds = np.linalg.pinv(jacobian_translational[:,1:]) @ (current_signal * direction)
 
-            log.debug("===============================================")
-            log.debug(f"Body ID: {body_id}")
-            log.debug(f"Position: {position}")
-            log.debug(f"Target Twist: {target_twist}")
-            log.debug("-----------------------------------------------")
-            log.debug(f"Joint Control Signal: {joint_speeds}")
+            joint_speeds_total += joint_speeds
 
-        self.target_twists = []
+        self.data.ctrl[1:] = joint_speeds_total
 
     def control_digit_tip(
         self,
@@ -339,13 +382,3 @@ class AllegroHand:
 
         # Finally, we translate the joint control signal to the proper actuator values
         self.data.ctrl[self.actuators.actuators(digit)] = joint_speeds
-
-        log.debug("===============================================")
-        log.debug(f"Digit: {digit}")
-        log.debug(f"Target Position: {target_position}")
-        log.debug(f"Digit Position: {digit_position}")
-        log.debug(f"Target Orientation: {target_orientation}")
-        log.debug(f"Digit Orientation: {digit_orientation}")
-        log.debug("-----------------------------------------------")
-        log.debug(f"Cartesian Control Signal: {cartesian_twist}")
-        log.debug(f"Joint Control Signal: {joint_speeds}")

@@ -21,36 +21,37 @@ xml_path = str(project_root / "assets" / "allegro" / "scene_left.xml")
 model = mujoco.MjModel.from_xml_path(xml_path)
 data = mujoco.MjData(model)
 
+# Set the initial hand pose.
+mujoco.mj_forward(model, data)
+
 allegro_hand = AllegroHand(
     model=model,
     data=data,
-    kp=0.05,
-    # ki=0.0,
-    ki=0.001,
-    kd=0.01,
-    integral_clip=0.1,
+    kp=0.07,
+    ki=0.0,
+    # ki=0.0001,
+    kd=0.001,
+    # integral_clip=0.01,
+    # only_position_control=True,
 )
 
 
 simulation_duration = 1000.0  # seconds
 simulation_speed_up = 1  # Speed up the simulation by this factor.
 
-
+# Wait a bit for the viewer to start.
 with mujoco.viewer.launch_passive(model, data) as viewer:
-    start = time.time()
+    # Wait a bit for the viewer to start.
+    time.sleep(10.0)
 
-    # Activate the contact points in the viewer.
-    with viewer.lock():
-        viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = True
-        viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = True
-        viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_TRANSPARENT] = True
+    start = time.time()
 
     while viewer.is_running() and time.time() - start < simulation_duration:
         step_start = time.time()
 
         allegro_hand.update()  # Update the hand state.
         allegro_hand.control_step()  # Control the hand.
-    
+
         mujoco.mj_step(model, data)
 
         # Pick up changes to the physics state, apply perturbations, update options from GUI.
